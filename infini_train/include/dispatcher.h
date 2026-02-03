@@ -16,12 +16,15 @@ public:
 
     template <typename RetT, class... ArgsT> RetT Call(ArgsT... args) const {
         // =================================== 作业 ===================================
-        // TODO：实现通用kernel调用接口
+        // 实现通用kernel调用接口
         // 功能描述：将存储的函数指针转换为指定类型并调用
         // =================================== 作业 ===================================
 
         using FuncT = RetT (*)(ArgsT...);
-        // TODO: 实现函数调用逻辑
+        // 将 void* 函数指针转换为目标函数类型
+        FuncT func = reinterpret_cast<FuncT>(func_ptr_);
+        // 调用函数并返回结果
+        return func(args...);
     }
 
 private:
@@ -37,17 +40,23 @@ public:
         return instance;
     }
 
-    const KernelFunction &GetKernel(KeyT key) const {
-        CHECK(key_to_kernel_map_.contains(key))
+    const KernelFunction GetKernel(const KeyT &key) const {
+        // key: {device_type, name}
+        auto it = key_to_kernel_map_.find(key);
+        CHECK(it != key_to_kernel_map_.end())
             << "Kernel not found: " << key.second << " on device: " << static_cast<int>(key.first);
-        return key_to_kernel_map_.at(key);
+        return it->second;
     }
 
     template <typename FuncT> void Register(const KeyT &key, FuncT &&kernel) {
-        // =================================== 作业 ===================================
-        // TODO：实现kernel注册机制
-        // 功能描述：将kernel函数与设备类型、名称绑定
-        // =================================== 作业 ===================================
+        // =================================== Assignment ===================================
+        // Implement kernel registration mechanism
+        // =================================== Assignment ===================================
+
+        // Check for duplicate registration
+        CHECK(key_to_kernel_map_.find(key) == key_to_kernel_map_.end()) << "Kernel already registered: " << key.second;
+        // Wrap kernel function as KernelFunction and store in map
+        key_to_kernel_map_.emplace(key, KernelFunction(std::forward<FuncT>(kernel)));
     }
 
 private:
@@ -56,7 +65,7 @@ private:
 } // namespace infini_train
 
 #define REGISTER_KERNEL(device, kernel_name, kernel_func)                                                              \
-    // =================================== 作业 ===================================
-    // TODO：实现自动注册宏
-    // 功能描述：在全局静态区注册kernel，避免显式初始化代码
-    // =================================== 作业 ===================================
+    static int __register_kernel_##kernel_name##__##__COUNTER__ = []() {                                               \
+        infini_train::Dispatcher::Instance().Register({device, #kernel_name}, kernel_func);                            \
+        return 0;                                                                                                      \
+    }();

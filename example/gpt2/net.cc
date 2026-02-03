@@ -1,3 +1,8 @@
+// Windows compatibility: define _USE_MATH_DEFINES before cmath to get M_PI
+#ifndef _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
+#endif
+
 #include "example/gpt2/net.h"
 
 #include <cmath>

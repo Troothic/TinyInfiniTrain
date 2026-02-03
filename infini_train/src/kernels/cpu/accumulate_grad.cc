@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstddef>
 #include <memory>
 
@@ -14,10 +15,42 @@ void AccumulateGrad(const std::shared_ptr<Tensor> &gradient, float rate, const s
 void AdamAccumulateGrad(const std::shared_ptr<Tensor> &grad, const std::shared_ptr<Tensor> &param,
                         const std::shared_ptr<Tensor> &m, const std::shared_ptr<Tensor> &v, float learning_rate,
                         float beta1, float beta2, float eps, int64_t t) {
-    // =================================== 作业 ===================================
-    // TODO：实现Adam优化器的梯度累积和参数更新
-    // REF:
-    // =================================== 作业 ===================================
+    // =================================== Assignment ===================================
+    // Adam optimizer gradient accumulation and parameter update
+    // Adam algorithm:
+    // m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+    // v_t = beta2 * v_{t-1} + (1 - beta2) * g_t^2
+    // m_hat = m_t / (1 - beta1^t)
+    // v_hat = v_t / (1 - beta2^t)
+    // theta = theta - lr * m_hat / (sqrt(v_hat) + eps)
+    // =================================== Assignment ===================================
+
+    const int64_t num_elements = grad->NumElements();
+    const float *grad_ptr = static_cast<const float *>(grad->DataPtr());
+    float *param_ptr = static_cast<float *>(param->DataPtr());
+    float *m_ptr = static_cast<float *>(m->DataPtr());
+    float *v_ptr = static_cast<float *>(v->DataPtr());
+
+    // Compute bias correction coefficients
+    const float bias_correction1 = 1.0f - std::pow(beta1, static_cast<float>(t));
+    const float bias_correction2 = 1.0f - std::pow(beta2, static_cast<float>(t));
+
+    for (int64_t i = 0; i < num_elements; ++i) {
+        const float g = grad_ptr[i];
+        
+        // Update first moment estimate (momentum)
+        m_ptr[i] = beta1 * m_ptr[i] + (1.0f - beta1) * g;
+        
+        // Update second moment estimate (RMSprop)
+        v_ptr[i] = beta2 * v_ptr[i] + (1.0f - beta2) * g * g;
+        
+        // Bias correction
+        const float m_hat = m_ptr[i] / bias_correction1;
+        const float v_hat = v_ptr[i] / bias_correction2;
+        
+        // Update parameter
+        param_ptr[i] -= learning_rate * m_hat / (std::sqrt(v_hat) + eps);
+    }
 }
 
 } // namespace infini_train::kernels::cpu

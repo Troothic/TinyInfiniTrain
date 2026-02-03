@@ -4,6 +4,7 @@
 #include <numeric>
 #include <tuple>
 
+#include "Eigen/Dense"
 #include "glog/logging.h"
 
 #include "infini_train/include/dispatcher.h"
@@ -11,25 +12,120 @@
 
 namespace infini_train::kernels::cpu {
 std::shared_ptr<Tensor> MatmulForward(const std::shared_ptr<Tensor> &input, const std::shared_ptr<Tensor> &other) {
-    // =================================== 作业 ===================================
-    // TODO：实现CPU上的矩阵乘法前向计算
-    // REF:
-    // =================================== 作业 ===================================
+    // =================================== Assignment ===================================
+    // CPU matrix multiplication forward: input[..., M, K] @ other[..., K, N] -> output[..., M, N]
+    // =================================== Assignment ===================================
 
-    auto output = std::make_shared<Tensor>();
-    return {output};
+    const auto &input_dims = input->Dims();
+    const auto &other_dims = other->Dims();
+    CHECK_GE(input_dims.size(), 2);
+    CHECK_GE(other_dims.size(), 2);
+
+    // Get matrix dimensions
+    const int64_t M = input_dims[input_dims.size() - 2];
+    const int64_t K = input_dims[input_dims.size() - 1];
+    const int64_t N = other_dims[other_dims.size() - 1];
+    
+    // Verify dimension match
+    CHECK_EQ(K, other_dims[other_dims.size() - 2]) << "Matrix dimension mismatch";
+
+    // Compute batch dimensions
+    const int64_t input_batch = std::accumulate(input_dims.begin(), input_dims.end() - 2, 1LL, std::multiplies<int64_t>{});
+    const int64_t other_batch = std::accumulate(other_dims.begin(), other_dims.end() - 2, 1LL, std::multiplies<int64_t>{});
+    CHECK(input_batch == other_batch || input_batch == 1 || other_batch == 1) << "Batch dimension incompatible";
+    const int64_t batch = std::max(input_batch, other_batch);
+
+    // Build output dimensions
+    std::vector<int64_t> output_dims;
+    if (input_dims.size() >= other_dims.size()) {
+        output_dims = std::vector<int64_t>(input_dims.begin(), input_dims.end() - 2);
+    } else {
+        output_dims = std::vector<int64_t>(other_dims.begin(), other_dims.end() - 2);
+    }
+    output_dims.push_back(M);
+    output_dims.push_back(N);
+
+    auto output = std::make_shared<Tensor>(output_dims, DataType::kFLOAT32);
+
+    // Get data pointers
+    const float *input_ptr = static_cast<const float *>(input->DataPtr());
+    const float *other_ptr = static_cast<const float *>(other->DataPtr());
+    float *output_ptr = static_cast<float *>(output->DataPtr());
+
+    // Execute batched matrix multiplication
+    for (int64_t b = 0; b < batch; ++b) {
+        const float *A = input_ptr + (input_batch == 1 ? 0 : b) * M * K;
+        const float *B = other_ptr + (other_batch == 1 ? 0 : b) * K * N;
+        float *C = output_ptr + b * M * N;
+
+        // Use Eigen Map for matrix multiplication
+        Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> A_mat(A, M, K);
+        Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> B_mat(B, K, N);
+        Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> C_mat(C, M, N);
+        C_mat = A_mat * B_mat;
+    }
+
+    return output;
 }
 
 std::tuple<std::shared_ptr<Tensor>, std::shared_ptr<Tensor>>
 MatmulBackward(const std::shared_ptr<Tensor> &input, const std::shared_ptr<Tensor> &other,
                const std::shared_ptr<Tensor> &grad_output) {
-    // =================================== 作业 ===================================
-    // TODO：实现CPU上的矩阵乘法反向传播
-    // REF:
-    // =================================== 作业 ===================================
+    // =================================== Assignment ===================================
+    // CPU matrix multiplication backward:
+    // grad_input = grad_output @ other^T
+    // grad_other = input^T @ grad_output
+    // =================================== Assignment ===================================
 
-    auto grad_input = std::make_shared<Tensor>();
-    auto grad_other = std::make_shared<Tensor>();
+    const auto &input_dims = input->Dims();
+    const auto &other_dims = other->Dims();
+    const auto &grad_dims = grad_output->Dims();
+
+    // Get matrix dimensions
+    const int64_t M = input_dims[input_dims.size() - 2];
+    const int64_t K = input_dims[input_dims.size() - 1];
+    const int64_t N = other_dims[other_dims.size() - 1];
+
+    // Compute batch dimensions
+    const int64_t input_batch = std::accumulate(input_dims.begin(), input_dims.end() - 2, 1LL, std::multiplies<int64_t>{});
+    const int64_t other_batch = std::accumulate(other_dims.begin(), other_dims.end() - 2, 1LL, std::multiplies<int64_t>{});
+    const int64_t batch = std::accumulate(grad_dims.begin(), grad_dims.end() - 2, 1LL, std::multiplies<int64_t>{});
+
+    // Create gradient tensors
+    auto grad_input = std::make_shared<Tensor>(input_dims, DataType::kFLOAT32);
+    auto grad_other = std::make_shared<Tensor>(other_dims, DataType::kFLOAT32);
+
+    // Get data pointers
+    const float *input_ptr = static_cast<const float *>(input->DataPtr());
+    const float *other_ptr = static_cast<const float *>(other->DataPtr());
+    const float *grad_out_ptr = static_cast<const float *>(grad_output->DataPtr());
+    float *grad_input_ptr = static_cast<float *>(grad_input->DataPtr());
+    float *grad_other_ptr = static_cast<float *>(grad_other->DataPtr());
+
+    // Initialize to zero
+    std::memset(grad_input_ptr, 0, grad_input->SizeInBytes());
+    std::memset(grad_other_ptr, 0, grad_other->SizeInBytes());
+
+    // Execute batched backward
+    for (int64_t b = 0; b < batch; ++b) {
+        const float *A = input_ptr + (input_batch == 1 ? 0 : b) * M * K;
+        const float *B = other_ptr + (other_batch == 1 ? 0 : b) * K * N;
+        const float *dC = grad_out_ptr + b * M * N;
+        float *dA = grad_input_ptr + (input_batch == 1 ? 0 : b) * M * K;
+        float *dB = grad_other_ptr + (other_batch == 1 ? 0 : b) * K * N;
+
+        Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> A_mat(A, M, K);
+        Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> B_mat(B, K, N);
+        Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dC_mat(dC, M, N);
+        Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dA_mat(dA, M, K);
+        Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> dB_mat(dB, K, N);
+
+        // grad_input = grad_output @ other^T
+        dA_mat += dC_mat * B_mat.transpose();
+        // grad_other = input^T @ grad_output
+        dB_mat += A_mat.transpose() * dC_mat;
+    }
+
     return {grad_input, grad_other};
 }
 

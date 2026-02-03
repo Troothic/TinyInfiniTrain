@@ -53,22 +53,63 @@ template <typename T> T BytesToType(const std::vector<uint8_t> &bytes, size_t of
 }
 
 TinyShakespeareFile ReadTinyShakespeareFile(const std::string &path, size_t sequence_length) {
-    /* =================================== 作业 ===================================
-       TODO：实现二进制数据集文件解析
-       文件格式说明：
+    /* =================================== Assignment ===================================
+       Parse binary dataset file
+       File format:
     ----------------------------------------------------------------------------------
     | HEADER (1024 bytes)                     | DATA (tokens)                        |
-    | magic(4B) | version(4B) | num_toks(4B) | reserved(1012B) | token数据           |
+    | magic(4B) | version(4B) | num_toks(4B) | reserved(1012B) | token data          |
     ----------------------------------------------------------------------------------
-       =================================== 作业 =================================== */
+       =================================== Assignment =================================== */
+
+    std::ifstream file(path, std::ios::binary);
+    CHECK(file.is_open()) << "Cannot open file: " << path;
+
+    // Read header (1024 bytes)
+    auto header = ReadSeveralBytesFromIfstream(1024, &file);
+    
+    // Parse header fields
+    uint32_t magic = BytesToType<uint32_t>(header, 0);        // magic (4B)
+    uint32_t version = BytesToType<uint32_t>(header, 4);      // version (4B)
+    uint32_t num_tokens = BytesToType<uint32_t>(header, 8);   // num_toks (4B)
+
+    // Check version validity
+    CHECK(kTypeMap.count(version)) << "Unsupported version: " << version;
+    TinyShakespeareType type = kTypeMap.at(version);
+    size_t token_size = kTypeToSize.at(type);
+    DataType data_type = kTypeToDataType.at(type);
+
+    // Compute number of sequences (each sequence contains sequence_length tokens)
+    size_t num_sequences = num_tokens / sequence_length;
+    
+    // Create dims
+    std::vector<int64_t> dims = {static_cast<int64_t>(num_sequences), static_cast<int64_t>(sequence_length)};
+    
+    // Create Tensor to store token data
+    infini_train::Tensor tensor(dims, data_type);
+    
+    // Read token data into Tensor
+    size_t data_size = num_sequences * sequence_length * token_size;
+    file.read(static_cast<char *>(tensor.DataPtr()), data_size);
+
+    TinyShakespeareFile result;
+    result.tensor = std::move(tensor);
+    result.dims = dims;
+    result.type = type;
+    
+    return result;
 }
 } // namespace
 
-TinyShakespeareDataset::TinyShakespeareDataset(const std::string &filepath, size_t sequence_length) {
-    // =================================== 作业 ===================================
-    // TODO：初始化数据集实例
-    // HINT: 调用ReadTinyShakespeareFile加载数据文件
-    // =================================== 作业 ===================================
+TinyShakespeareDataset::TinyShakespeareDataset(const std::string &filepath, size_t sequence_length)
+    : sequence_length_(sequence_length),
+      sequence_size_in_bytes_(sequence_length * sizeof(int64_t)),
+      text_file_(ReadTinyShakespeareFile(filepath, sequence_length)),
+      num_samples_(text_file_.dims[0] - 1) {
+    // =================================== Assignment ===================================
+    // Initialize dataset instance
+    // Call ReadTinyShakespeareFile to load data file
+    // =================================== Assignment ===================================
 }
 
 std::pair<std::shared_ptr<infini_train::Tensor>, std::shared_ptr<infini_train::Tensor>>

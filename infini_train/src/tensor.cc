@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <iomanip>
 #include <memory>
 #include <numeric>
 #include <unordered_map>
@@ -277,13 +278,44 @@ std::shared_ptr<Tensor> Tensor::Contiguous() {
 }
 
 std::shared_ptr<Tensor> Tensor::Flatten(int64_t start, int64_t end) {
-    // return Contiguous()->View(new_shape);
-    // =================================== 作业 ===================================
-    // TODO：实现张量扁平化操作，将指定维度范围[start, end]内的所有维度合并为一个维度
-    // HINT:
-    // =================================== 作业 ===================================
+    // =================================== Assignment ===================================
+    // Flatten tensor: merge dimensions in range [start, end] into one dimension
+    // =================================== Assignment ===================================
 
-    return std::make_shared<Tensor>();
+    // Handle negative indices
+    if (start < 0) {
+        start += static_cast<int64_t>(dims_.size());
+    }
+    if (end < 0) {
+        end += static_cast<int64_t>(dims_.size());
+    }
+
+    // Boundary check
+    CHECK_GE(start, 0) << "start dimension index out of bounds";
+    CHECK_LT(end, static_cast<int64_t>(dims_.size())) << "end dimension index out of bounds";
+    CHECK_LE(start, end) << "start must be <= end";
+
+    // Build new shape
+    std::vector<int64_t> new_shape;
+    
+    // Add dimensions in range [0, start)
+    for (int64_t i = 0; i < start; ++i) {
+        new_shape.push_back(dims_[i]);
+    }
+    
+    // Compute product of dimensions in range [start, end]
+    int64_t flattened_dim = 1;
+    for (int64_t i = start; i <= end; ++i) {
+        flattened_dim *= dims_[i];
+    }
+    new_shape.push_back(flattened_dim);
+    
+    // Add dimensions in range (end, dims_.size())
+    for (int64_t i = end + 1; i < static_cast<int64_t>(dims_.size()); ++i) {
+        new_shape.push_back(dims_[i]);
+    }
+
+    return Contiguous()->View(new_shape);
 }
 
 std::shared_ptr<Tensor> Tensor::Squeeze(int64_t dim) {
@@ -354,10 +386,25 @@ std::shared_ptr<Tensor> Tensor::RequiresGrad() {
 }
 
 void Tensor::Backward(std::shared_ptr<Tensor> gradient, bool retain_graph, bool create_graph) const {
-    // =================================== 作业 ===================================
-    // TODO：实现自动微分反向传播
-    // 功能描述：1. 计算当前张量对叶子节点的梯度    2. 支持多输出场景的梯度累加
-    // =================================== 作业 ===================================
+    // =================================== Assignment ===================================
+    // Implement autograd backward:
+    // 1. Compute gradients for leaf tensors  2. Support gradient accumulation for multi-output
+    // =================================== Assignment ===================================
+
+    // If no grad_fn, this is a leaf node or doesn't require grad
+    if (!grad_fn_) {
+        return;
+    }
+
+    // If no gradient provided, create ones (for scalar loss)
+    std::shared_ptr<Tensor> grad = gradient;
+    if (!grad) {
+        grad = std::make_shared<Tensor>(dims_, dtype_, GetDevice());
+        grad->Fill<float>(1.0f);
+    }
+
+    // Call grad function's backward with output index
+    grad_fn_->BackwardPartial(grad, output_idx_);
 }
 
 void Tensor::ZeroGrad() {

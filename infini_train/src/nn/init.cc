@@ -75,7 +75,7 @@ float CalculateGain(NonLinearityType nonlinearity, std::optional<float> param = 
         NonLinearityType::kConv3D,           NonLinearityType::kConvTransposed1d, NonLinearityType::kConvTransposed2d,
         NonLinearityType::kConvTransposed3d,
     };
-    if (kLinearFns.contains(nonlinearity) || nonlinearity == NonLinearityType::kSigmoid) {
+    if (kLinearFns.count(nonlinearity) || nonlinearity == NonLinearityType::kSigmoid) {
         return 1.0f;
     } else if (nonlinearity == NonLinearityType::kTanh) {
         return 5.0f / 3;
