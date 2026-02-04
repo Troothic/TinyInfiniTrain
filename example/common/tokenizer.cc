@@ -152,7 +152,7 @@ void Tokenizer::GenerateText(infini_train::nn::Module &model, uint32_t batch_siz
         auto logits_last = logits->Slice(1, t - 1, t, 1)->Squeeze(1);
         
         // Apply softmax to get probability distribution
-        auto probs = nn::functional::Softmax(logits_last, -1);
+        auto probs = nn::function::Softmax(logits_last, -1);
         
         // Transfer probabilities to CPU for sampling
         auto probs_cpu = std::make_shared<Tensor>(probs->To(Device(DeviceType::kCPU, 0)));
