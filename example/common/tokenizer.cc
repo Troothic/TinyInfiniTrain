@@ -9,6 +9,8 @@
 
 #include "glog/logging.h"
 
+#include "infini_train/include/nn/functional.h"
+
 namespace infini_train {
 
 constexpr uint32_t kGpt2Eot = 50256;
